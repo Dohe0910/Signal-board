@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Signal — check the room, work it out on the board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14161C; --line:#39404F; --paper:#E6E9EE; --paper2:#F7F8FA; --mute:#8A93A3;
+    --stop:#E23D33; --slow:#F0A81C; --go:#24A05A;
+    --display:'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+    --body:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;min-height:100%;overscroll-behavior:none}
+  body{font-family:var(--body);background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body.dark{background:var(--ink);color:var(--paper)}
+  .wrap{max-width:760px;margin:0 auto;padding:26px 20px 60px}
+  .eyebrow{font-family:var(--display);font-weight:500;font-size:12px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--mute);margin:0 0 6px}
+  h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,7vw,44px);line-height:1.02;margin:0 0 10px;letter-spacing:-.02em}
+  p.lede{font-size:16px;line-height:1.5;color:#4B5261;margin:0 0 26px;max-width:46ch}
+  body.dark p.lede{color:#A7AFBE}
+  label{display:block;font-family:var(--display);font-weight:500;font-size:12px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--mute);margin:0 0 7px}
+  input{width:100%;font:inherit;font-size:17px;padding:14px 15px;border-radius:12px;
+    border:2px solid #C9CFD9;background:var(--paper2);color:var(--ink)}
+  body.dark input{background:#1B1F29;border-color:var(--line);color:var(--paper)}
+  input:focus-visible,button:focus-visible{outline:3px solid #4C7DF0;outline-offset:2px}
+  .field{margin-bottom:16px}
+  .btn{font-family:var(--display);font-weight:700;font-size:16px;cursor:pointer;padding:14px 22px;
+    border-radius:12px;border:2px solid var(--ink);background:var(--ink);color:var(--paper)}
+  body.dark .btn{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+  .btn.ghost{background:transparent;color:var(--ink)}
+  body.dark .btn.ghost{background:transparent;color:var(--paper)}
+  .linkish{background:none;border:none;padding:6px 0;font-family:var(--display);font-weight:500;
+    font-size:14px;color:var(--mute);cursor:pointer;text-decoration:underline}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .hint{font-size:13px;color:var(--mute);line-height:1.5;margin:14px 0 0}
+  .status{font-size:13px;color:var(--mute);margin:0 0 18px}
+  .err{background:#FFE9E7;border:2px solid var(--stop);color:#8C1F18;padding:12px 14px;border-radius:12px;
+    font-size:14px;margin-bottom:16px}
+  body.dark .err{background:#3A1512;color:#FFC9C4}
+  .hidden{display:none !important}
+  .roles{display:grid;gap:14px;grid-template-columns:1fr 1fr}
+  @media(max-width:520px){.roles{grid-template-columns:1fr}}
+  .role{text-align:left;padding:22px 20px 20px;border-radius:16px;border:2px solid #C9CFD9;
+    background:var(--paper2);cursor:pointer;font:inherit;color:inherit}
+  .role:hover{border-color:var(--ink)}
+  .role strong{display:block;font-family:var(--display);font-size:22px;margin-bottom:6px}
+  .role span{font-size:14px;color:#5A6273;line-height:1.45}
+  .lights{display:flex;gap:6px;margin-bottom:14px}
+  .lights i{width:14px;height:14px;border-radius:50%;display:block}
+
+  .signalbtns{display:grid;gap:12px;margin:8px 0 18px}
+  .sig{display:flex;align-items:center;gap:16px;text-align:left;padding:22px 20px;border-radius:18px;
+    border:3px solid transparent;cursor:pointer;font:inherit;color:#fff;transition:transform .12s ease,opacity .15s ease}
+  .sig .dot{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.92);flex:0 0 auto;
+    display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:18px}
+  .sig b{display:block;font-family:var(--display);font-size:21px;font-weight:700}
+  .sig em{display:block;font-style:normal;font-size:14px;opacity:.92;margin-top:2px}
+  .sig[data-v="stop"]{background:var(--stop)} .sig[data-v="stop"] .dot{color:var(--stop)}
+  .sig[data-v="slow"]{background:var(--slow);color:#2B1E00} .sig[data-v="slow"] .dot{color:#8A6000}
+  .sig[data-v="go"]{background:var(--go)} .sig[data-v="go"] .dot{color:var(--go)}
+  .sig:hover{transform:translateY(-2px)}
+  .picked .sig{opacity:.34}
+  .picked .sig.on{opacity:1;border-color:var(--ink);transform:none}
+  .sig .dot::after{content:""} .sig.on .dot::after{content:"✓"}
+
+  .bar{display:flex;height:86px;border-radius:14px;overflow:hidden;background:#1B1F29;border:1px solid var(--line);margin:6px 0 14px}
+  .bar div{transition:width .5s cubic-bezier(.4,0,.2,1);display:grid;place-items:center;min-width:0;
+    font-family:var(--display);font-weight:700;font-size:26px;color:#fff}
+  .bar .s{background:var(--stop)} .bar .w{background:var(--slow);color:#2B1E00} .bar .g{background:var(--go)}
+  .bar.empty{display:grid;place-items:center;color:var(--mute);font-size:15px}
+  .tallies{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px}
+  .tally{background:#1B1F29;border:1px solid var(--line);border-radius:14px;padding:14px}
+  .tally b{font-family:var(--display);font-size:30px;display:block;line-height:1}
+  .tally span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);font-family:var(--display);font-weight:500}
+  .tally.s b{color:var(--stop)} .tally.w b{color:var(--slow)} .tally.g b{color:var(--go)}
+  .group{margin-bottom:18px}
+  .group h3{font-family:var(--display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 10px;color:var(--mute)}
+  .dots{display:flex;flex-wrap:wrap;gap:9px}
+  .pip{width:26px;height:26px;border-radius:50%;display:block}
+  .pip.s{background:var(--stop)} .pip.w{background:var(--slow)} .pip.g{background:var(--go)}
+  .code{font-family:var(--display);font-weight:700;letter-spacing:.14em;font-size:32px}
+  .codebox{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px;padding:16px 18px;
+    border:1px solid var(--line);border-radius:14px;background:#1B1F29}
+  .topic{font-family:var(--display);font-weight:700;font-size:clamp(22px,5vw,32px);margin:0 0 18px;letter-spacing:-.01em}
+
+  /* ================= BOARD ================= */
+  #present{position:fixed;inset:0;z-index:50;background:#EFEFF2;color:var(--ink);display:flex;flex-direction:column}
+  #present.hidden{display:none !important}
+  .b-head{display:flex;align-items:center;gap:12px;padding:max(8px,env(safe-area-inset-top)) 14px 8px;
+    background:rgba(255,255,255,.86);backdrop-filter:blur(14px);border-bottom:1px solid #DCDCE2;flex:0 0 auto}
+  .b-badge{display:flex;align-items:baseline;gap:8px}
+  .b-badge span{font-family:var(--display);font-weight:500;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8A8A93}
+  .b-badge b{font-family:var(--display);font-weight:700;font-size:clamp(17px,2.6vmin,26px);letter-spacing:.09em}
+  .b-topic{font-family:var(--display);font-weight:500;font-size:clamp(13px,2vmin,18px);color:#5A5A63;margin:0;
+    flex:1 1 60px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .b-counts{display:flex;gap:6px}
+  .b-counts b{font-family:var(--display);font-weight:700;font-size:14px;color:#fff;border-radius:999px;
+    padding:5px 12px;min-width:40px;text-align:center}
+  .b-counts .s{background:var(--stop)} .b-counts .w{background:var(--slow);color:#2B1E00} .b-counts .g{background:var(--go)}
+  .b-done{font-family:var(--display);font-weight:700;font-size:14px;background:var(--ink);color:#fff;border:none;
+    border-radius:999px;padding:9px 18px;cursor:pointer}
+  .b-strip{display:flex;height:7px;flex:0 0 auto;background:#DCDCE2}
+  .b-strip div{transition:width .5s cubic-bezier(.4,0,.2,1)}
+  .b-strip .s{background:var(--stop)} .b-strip .w{background:var(--slow)} .b-strip .g{background:var(--go)}
+  .b-stage{position:relative;flex:1 1 auto;overflow:hidden;touch-action:none}
+  #board{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .b-empty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;
+    font-family:var(--display);font-weight:500;color:#A9A9B2;font-size:clamp(14px,2.2vmin,20px);line-height:1.5}
+  .b-zoom{position:absolute;top:12px;right:12px;display:flex;gap:6px;align-items:center;
+    background:rgba(255,255,255,.92);border:1px solid #DCDCE2;border-radius:999px;padding:4px;
+    box-shadow:0 6px 18px rgba(20,22,28,.09)}
+  .b-zoom button{border:none;background:none;font-family:var(--display);font-weight:700;font-size:15px;
+    width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--ink)}
+  .b-zoom button:hover{background:#EFEFF2}
+  .b-zoom .lvl{font-family:var(--display);font-weight:500;font-size:12px;color:#6E6E77;min-width:42px;text-align:center}
+
+  /* floating tool pill */
+  .pill{position:absolute;left:50%;transform:translateX(-50%);bottom:max(14px,env(safe-area-inset-bottom));
+    display:flex;align-items:center;gap:4px;padding:7px;background:rgba(255,255,255,.94);
+    backdrop-filter:blur(18px);border:1px solid #DCDCE2;border-radius:20px;
+    box-shadow:0 12px 34px rgba(20,22,28,.16);max-width:calc(100% - 24px);flex-wrap:wrap;justify-content:center}
+  .tool{width:44px;height:44px;border:none;background:none;border-radius:13px;cursor:pointer;display:grid;place-items:center;color:#3A3A42}
+  .tool:hover{background:#EFEFF2}
+  .tool.on{background:var(--ink);color:#fff}
+  .tool svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .sep{width:1px;height:26px;background:#DCDCE2;margin:0 4px}
+  .inks{display:flex;gap:5px;padding:0 4px}
+  .ink{width:26px;height:26px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;padding:0}
+  .ink.on{border-color:var(--ink);transform:scale(1.12)}
+  .pill .lab{font-family:var(--display);font-weight:500;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:#8A8A93;padding:0 6px}
+
+  /* text editing overlay */
+  #editor{position:absolute;display:none;z-index:9;border:none;outline:2px solid var(--ink);border-radius:8px;
+    padding:10px;resize:none;font-family:var(--body);line-height:1.32;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+
+  /* student board */
+  .sboard{margin:22px 0 0}
+  .sboard h3{font-family:var(--display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+  .sboard-shell{position:relative;width:100%;aspect-ratio:4/3;border-radius:16px;overflow:hidden;
+    background:#F4F4F7;border:2px solid #C9CFD9}
+  #sboard{position:absolute;inset:0;width:100%;height:100%;display:block}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section id="scr-home">
+    <div class="lights"><i style="background:var(--stop)"></i><i style="background:var(--slow)"></i><i style="background:var(--go)"></i></div>
+    <p class="eyebrow">Signal</p>
+    <h1>Check the room.<br>Then work it out together.</h1>
+    <p class="lede">Students tap red, amber or green on their own device. When the reds come in, open the board — an endless canvas with pen, sticky notes and shapes that appears live on every student's screen.</p>
+    <div class="roles">
+      <button class="role" id="go-teacher"><strong>I'm teaching</strong><span>Open a room, watch the answers land, work on the board.</span></button>
+      <button class="role" id="go-student"><strong>I'm a student</strong><span>Type the code on the board, tap a colour, follow along.</span></button>
+    </div>
+    <p class="hint" id="home-hint"></p>
+  </section>
+
+  <section id="scr-tsetup" class="hidden">
+    <p class="eyebrow">Teacher</p>
+    <h1>Open a room</h1>
+    <div id="tsetup-err" class="err hidden"></div>
+    <div class="field"><label for="t-topic">What are you checking on?</label>
+      <input id="t-topic" placeholder="Long division with remainders" maxlength="80"></div>
+    <div class="field"><label for="t-code">Room code</label>
+      <input id="t-code" maxlength="6" style="text-transform:uppercase;letter-spacing:.2em;font-weight:700"></div>
+    <div class="toolbar"><button class="btn" id="t-open">Open the room</button><button class="btn ghost" data-home>Back</button></div>
+    <p class="hint">Answers come in anonymously. Anyone with the code can see the tally and the board, so use a fresh code for each class.</p>
+  </section>
+
+  <section id="scr-teacher" class="hidden">
+    <p class="eyebrow">Live room</p>
+    <div class="codebox">
+      <div><p class="eyebrow" style="margin:0 0 2px">Students join with</p><span class="code" id="t-showcode">——</span></div>
+      <button class="linkish" id="t-edit">Change topic</button>
+    </div>
+    <p class="topic" id="t-showtopic"></p>
+    <div class="bar empty" id="t-bar">No taps yet — put the code on the board.</div>
+    <div class="tallies">
+      <div class="tally s"><b id="n-stop">0</b><span>Lost me</span></div>
+      <div class="tally w"><b id="n-slow">0</b><span>Getting there</span></div>
+      <div class="tally g"><b id="n-go">0</b><span>Got it</span></div>
+    </div>
+    <div id="t-groups"></div>
+    <p class="status" id="t-status">Updating every few seconds.</p>
+    <div class="toolbar">
+      <button class="btn" id="t-present">Open the board</button>
+      <button class="btn ghost" id="t-clear">Clear responses</button>
+      <button class="btn ghost" data-home>Close room</button>
+    </div>
+    <p class="hint">The board follows you: students see the part of the canvas you're looking at, so panning and zooming takes the class with you.</p>
+  </section>
+
+  <!-- ============ BOARD ============ -->
+  <div id="present" class="hidden">
+    <div class="b-head">
+      <div class="b-badge"><span>Code</span><b id="p-code">——</b></div>
+      <p class="b-topic" id="p-topic"></p>
+      <div class="b-counts">
+        <b class="s" id="c-stop">0</b><b class="w" id="c-slow">0</b><b class="g" id="c-go">0</b>
+      </div>
+      <button class="b-done" id="p-exit">Done</button>
+    </div>
+    <div class="b-strip" id="b-strip"></div>
+    <div class="b-stage" id="stage">
+      <canvas id="board"></canvas>
+      <div class="b-empty" id="board-empty">Draw with a finger or Apple Pencil.<br>Two fingers to pan and pinch to zoom.</div>
+      <textarea id="editor" spellcheck="false"></textarea>
+      <div class="b-zoom">
+        <button id="z-out" aria-label="Zoom out">−</button>
+        <span class="lvl" id="z-level">100%</span>
+        <button id="z-in" aria-label="Zoom in">+</button>
+        <button id="z-fit" aria-label="Fit to content" title="Fit everything">⤢</button>
+      </div>
+      <div class="pill" id="pill">
+        <button class="tool on" data-tool="pen" title="Pen" aria-label="Pen"><svg viewBox="0 0 24 24"><path d="M4 20l4-1 10-10a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14 6l3 3"/></svg></button>
+        <button class="tool" data-tool="marker" title="Highlighter" aria-label="Highlighter"><svg viewBox="0 0 24 24"><path d="M6 14l6-9 6 4-6 9H6z"/><path d="M4 20h16"/></svg></button>
+        <button class="tool" data-tool="erase" title="Eraser" aria-label="Eraser"><svg viewBox="0 0 24 24"><path d="M8 18H5l-2-2 9-9 6 6-5 5"/><path d="M3 21h18"/></svg></button>
+        <span class="sep"></span>
+        <button class="tool" data-tool="note" title="Sticky note" aria-label="Sticky note"><svg viewBox="0 0 24 24"><path d="M4 4h16v10l-6 6H4z"/><path d="M20 14h-6v6"/></svg></button>
+        <button class="tool" data-tool="text" title="Text" aria-label="Text"><svg viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M9 19h6"/></svg></button>
+        <button class="tool" data-tool="rect" title="Box" aria-label="Box"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/></svg></button>
+        <button class="tool" data-tool="ellipse" title="Circle" aria-label="Circle"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="7"/></svg></button>
+        <button class="tool" data-tool="arrow" title="Arrow" aria-label="Arrow"><svg viewBox="0 0 24 24"><path d="M4 18L20 6"/><path d="M13 6h7v7"/></svg></button>
+        <button class="tool" data-tool="select" title="Move things" aria-label="Move things"><svg viewBox="0 0 24 24"><path d="M5 3l6 16 2-6 6-2z"/></svg></button>
+        <span class="sep"></span>
+        <span class="inks" id="inks">
+          <button class="ink on" data-c="#14161C" style="background:#14161C" aria-label="Ink"></button>
+          <button class="ink" data-c="#E23D33" style="background:#E23D33" aria-label="Red"></button>
+          <button class="ink" data-c="#2F6BE0" style="background:#2F6BE0" aria-label="Blue"></button>
+          <button class="ink" data-c="#24A05A" style="background:#24A05A" aria-label="Green"></button>
+          <button class="ink" data-c="#F0A81C" style="background:#F0A81C" aria-label="Amber"></button>
+        </span>
+        <span class="sep"></span>
+        <button class="tool" id="b-undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-5-4 5-4"/><path d="M4 10h9a6 6 0 0 1 0 12h-3"/></svg></button>
+        <button class="tool" id="b-redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="M15 14l5-4-5-4"/><path d="M20 10h-9a6 6 0 0 0 0 12h3"/></svg></button>
+        <button class="tool" id="b-wipe" title="Clear the board" aria-label="Clear the board"><svg viewBox="0 0 24 24"><path d="M5 7h14"/><path d="M10 7V5h4v2"/><path d="M6 7l1 13h10l1-13"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <section id="scr-join" class="hidden">
+    <p class="eyebrow">Student</p>
+    <h1>Join the room</h1>
+    <div id="join-err" class="err hidden"></div>
+    <div class="field"><label for="s-code">Room code</label>
+      <input id="s-code" maxlength="6" style="text-transform:uppercase;letter-spacing:.2em;font-weight:700" placeholder="ABC123"></div>
+    <div class="toolbar"><button class="btn" id="s-join">Join</button><button class="btn ghost" data-home>Back</button></div>
+    <p class="hint">No name needed. Your teacher sees the colours the class picked, not who picked them.</p>
+  </section>
+
+  <section id="scr-student" class="hidden">
+    <p class="eyebrow" id="s-eyebrow">Room</p>
+    <p class="topic" id="s-topic">How's it going?</p>
+    <div class="signalbtns" id="s-buttons">
+      <button class="sig" data-v="stop"><span class="dot"></span><span><b>I don't get it</b><em>Please go over this again</em></span></button>
+      <button class="sig" data-v="slow"><span class="dot"></span><span><b>Sort of</b><em>Some parts make sense, some don't</em></span></button>
+      <button class="sig" data-v="go"><span class="dot"></span><span><b>I've got it</b><em>I could explain it to someone else</em></span></button>
+    </div>
+    <p class="status" id="s-status">Tap the one that's true right now. You can change it any time.</p>
+    <div class="sboard hidden" id="s-boardwrap">
+      <h3>Your teacher's board</h3>
+      <div class="sboard-shell"><canvas id="sboard"></canvas></div>
+    </div>
+    <div class="toolbar"><button class="btn ghost" data-home>Leave room</button></div>
+  </section>
+</div>
+
+<script type="module">
+  /* ---------- Firebase: live sync for rooms, answers and the board ---------- */
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, set, get, remove, onValue, onDisconnect }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCvzMW1WEFyL-kSNkhZxD9PaA-Ql4xdso8",
+    authDomain: "signal-classroom.firebaseapp.com",
+    databaseURL: "https://signal-classroom-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "signal-classroom",
+    storageBucket: "signal-classroom.firebasestorage.app",
+    messagingSenderId: "880275709472",
+    appId: "1:880275709472:web:780b8252caed99eb1b2645"
+  };
+
+  let db = null, FB = false;
+  try{ db = getDatabase(initializeApp(firebaseConfig)); FB = true; }
+  catch(e){ console.warn("Firebase unavailable, running on one device only", e); }
+
+  const $ = id => document.getElementById(id);
+  const SCREENS = ["scr-home","scr-tsetup","scr-teacher","scr-join","scr-student"];
+  const CLASSOF = {stop:"s", slow:"w", go:"g"};
+  const WORD = {stop:"Lost me", slow:"Getting there", go:"Got it"};
+  const NOTE_TINTS = ["#FFE27A","#FFD1DC","#BFE3FF","#C8F0D2"];
+
+  let state = {room:"", topic:"", me:"", local:{}};
+  let watchers = [];   // live listeners, detached when leaving a room
+
+  // paths in the database
+  const rRoom      = code => "rooms/" + code;
+  const rTopic     = code => rRoom(code) + "/topic";
+  const rBoard     = code => rRoom(code) + "/board";
+  const rAnswers   = code => rRoom(code) + "/answers";
+  const rAnswer    = (code, me) => rAnswers(code) + "/" + me;
+
+  function watch(path, cb){
+    if(!FB) return;
+    const off = onValue(ref(db, path), snap => cb(snap.val()), err => console.warn(err));
+    watchers.push(off);
+  }
+  function unwatchAll(){ watchers.forEach(off => { try{ off(); }catch(e){} }); watchers = []; }
+  async function put(path, value){
+    if(!FB){ state.local[path] = value; return true; }
+    try{ await set(ref(db, path), value); return true; }catch(e){ console.warn(e); return false; }
+  }
+  async function grab(path){
+    if(!FB) return state.local[path] || null;
+    try{ const s = await get(ref(db, path)); return s.exists() ? s.val() : null; }catch(e){ return null; }
+  }
+  async function drop(path){
+    if(!FB){ delete state.local[path]; return; }
+    try{ await remove(ref(db, path)); }catch(e){ console.warn(e); }
+  }
+
+  function show(id){
+    SCREENS.forEach(s => $(s).classList.toggle("hidden", s !== id));
+    document.body.classList.toggle("dark", id === "scr-teacher");
+    window.scrollTo(0,0);
+  }
+  async function goHome(){
+    unwatchAll();
+    if(!$("present").classList.contains("hidden")) present(false);
+    if(state.room && state.me) await drop(rAnswer(state.room, state.me));  // student leaving clears their tap
+    state = {room:"", topic:"", me:"", local:state.local};
+    show("scr-home");
+  }
+  document.querySelectorAll("[data-home]").forEach(b => b.addEventListener("click", goHome));
+  $("home-hint").textContent = FB
+    ? "Answers are anonymous — no names are asked for or stored. Anyone with the room code can see the tally and the board."
+    : "Couldn't reach the database, so this copy works on one screen only — the board still works for writing.";
+
+  const anonId = () => "a" + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  const cleanCode = v => (v||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);
+  function randomCode(){
+    const a="ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let o="";
+    for(let i=0;i<5;i++) o += a[Math.floor(Math.random()*a.length)];
+    return o;
+  }
+
+  /* ==========================================================
+     BOARD — infinite canvas. Objects live in world coordinates;
+     the view is a window onto them, and that window is what the
+     class sees.
+     ========================================================== */
+  const doc = {objs:[], view:{x:-400, y:-300, z:1}};
+  const bc = $("board"), stage = $("stage"), ed = $("editor");
+  let tool = "pen", inkColour = "#14161C", noteTint = 0;
+  let undoStack = [], redoStack = [];
+  let drawing = null, dragging = null, editing = null;
+  const pointers = new Map();
+  let pinch = null, penSeen = false, dirty = false;
+
+  const R = n => Math.round(n*10)/10;
+  function snapshot(){ undoStack.push(JSON.stringify(doc.objs)); if(undoStack.length>40) undoStack.shift(); redoStack=[]; }
+  function restore(from,to){
+    if(!from.length) return;
+    to.push(JSON.stringify(doc.objs));
+    doc.objs = JSON.parse(from.pop());
+    render(); markDirty();
+  }
+  function markDirty(){ dirty = true; queueSave(); }
+
+  function stageSize(){ const r = stage.getBoundingClientRect(); return {w:r.width, h:r.height}; }
+  function toWorld(cx,cy){
+    const r = bc.getBoundingClientRect(), v = doc.view;
+    return {x: v.x + (cx-r.left)/v.z, y: v.y + (cy-r.top)/v.z};
+  }
+  function toScreen(x,y){ const v = doc.view; return {x:(x-v.x)*v.z, y:(y-v.y)*v.z}; }
+
+  function ctx2d(cv,w,h){
+    const dpr = Math.min(window.devicePixelRatio||1, 2.5);
+    const pw = Math.max(1,Math.round(w*dpr)), ph = Math.max(1,Math.round(h*dpr));
+    if(cv.width !== pw || cv.height !== ph){ cv.width = pw; cv.height = ph; } // resizing clears, so only when it changes
+    const c = cv.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0);
+    c.lineCap="round"; c.lineJoin="round"; return c;
+  }
+  function wrapLines(c, text, maxW){
+    const out = [];
+    String(text||"").split("\n").forEach(para => {
+      const words = para.split(" "); let line = "";
+      words.forEach(w => {
+        const test = line ? line+" "+w : w;
+        if(c.measureText(test).width > maxW && line){ out.push(line); line = w; }
+        else line = test;
+      });
+      out.push(line);
+    });
+    return out;
+  }
+  function drawObjects(c, objs, view, w, h){
+    // dot grid, Freeform-style
+    const step = 26*view.z;
+    if(step > 9){
+      c.fillStyle = "#D7D7DE";
+      const ox = (-view.x*view.z) % step, oy = (-view.y*view.z) % step;
+      for(let x = ox % step; x < w; x += step)
+        for(let y = oy % step; y < h; y += step) c.fillRect(x, y, 1.4, 1.4);
+    }
+    c.save();
+    objs.forEach(o => {
+      const z = view.z;
+      const sx = (o.x - view.x)*z, sy = (o.y - view.y)*z;
+      if(o.t === "ink"){
+        if(!o.p || o.p.length < 2) return;
+        c.globalAlpha = o.m ? .38 : 1;
+        c.strokeStyle = o.c; c.lineWidth = Math.max(.6, o.w*z); c.lineCap = o.m ? "butt" : "round";
+        c.beginPath();
+        c.moveTo((o.p[0]-view.x)*z, (o.p[1]-view.y)*z);
+        for(let i=2;i<o.p.length;i+=2) c.lineTo((o.p[i]-view.x)*z, (o.p[i+1]-view.y)*z);
+        if(o.p.length===2) c.lineTo((o.p[0]-view.x)*z+.1, (o.p[1]-view.y)*z);
+        c.stroke(); c.globalAlpha = 1; c.lineCap = "round";
+      } else if(o.t === "note"){
+        const w2 = o.w*z, h2 = o.h*z;
+        c.fillStyle = "rgba(20,22,28,.13)";
+        roundRect(c, sx+2, sy+5, w2, h2, 10*z); c.fill();
+        c.fillStyle = o.c; roundRect(c, sx, sy, w2, h2, 10*z); c.fill();
+        c.fillStyle = "#22242B"; c.font = "500 " + (17*z) + "px " + fontStack();
+        c.textBaseline = "top";
+        wrapLines(c, o.tx, w2 - 22*z).slice(0, Math.floor((h2-16*z)/(22*z))).forEach((ln,i) =>
+          c.fillText(ln, sx + 11*z, sy + 11*z + i*22*z));
+      } else if(o.t === "text"){
+        c.fillStyle = o.c; c.font = "500 " + (o.s*z) + "px " + fontStack(); c.textBaseline = "top";
+        wrapLines(c, o.tx, o.w*z).forEach((ln,i) => c.fillText(ln, sx, sy + i*o.s*1.3*z));
+      } else if(o.t === "shape"){
+        const ex = (o.x2 - view.x)*z, ey = (o.y2 - view.y)*z;
+        c.strokeStyle = o.c; c.lineWidth = Math.max(1, o.w*z);
+        if(o.k === "rect"){ roundRect(c, Math.min(sx,ex), Math.min(sy,ey), Math.abs(ex-sx), Math.abs(ey-sy), 8*z); c.stroke(); }
+        else if(o.k === "ellipse"){
+          c.beginPath();
+          c.ellipse((sx+ex)/2, (sy+ey)/2, Math.abs(ex-sx)/2, Math.abs(ey-sy)/2, 0, 0, Math.PI*2); c.stroke();
+        } else {
+          c.beginPath(); c.moveTo(sx,sy); c.lineTo(ex,ey); c.stroke();
+          const a = Math.atan2(ey-sy, ex-sx), L = 13*z;
+          c.beginPath(); c.moveTo(ex,ey);
+          c.lineTo(ex - L*Math.cos(a-.42), ey - L*Math.sin(a-.42));
+          c.moveTo(ex,ey);
+          c.lineTo(ex - L*Math.cos(a+.42), ey - L*Math.sin(a+.42));
+          c.stroke();
+        }
+      }
+    });
+    c.restore();
+  }
+  const fontStack = () => "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  function roundRect(c,x,y,w,h,r){
+    r = Math.max(0, Math.min(r, Math.abs(w)/2, Math.abs(h)/2));
+    c.beginPath(); c.moveTo(x+r,y);
+    c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+    c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+  }
+  let frame = 0;
+  function render(){ if(frame) return; frame = requestAnimationFrame(() => { frame = 0; paint(); }); }
+  function paint(){
+    const {w,h} = stageSize(); if(w<2) return;
+    const c = ctx2d(bc,w,h);
+    c.clearRect(0,0,w,h);
+    drawObjects(c, doc.objs, doc.view, w, h);
+    $("board-empty").classList.toggle("hidden", doc.objs.length > 0);
+    $("z-level").textContent = Math.round(doc.view.z*100) + "%";
+  }
+
+  // ---------- hit testing ----------
+  function bounds(o){
+    if(o.t === "ink"){
+      let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+      for(let i=0;i<o.p.length;i+=2){ x1=Math.min(x1,o.p[i]); x2=Math.max(x2,o.p[i]);
+        y1=Math.min(y1,o.p[i+1]); y2=Math.max(y2,o.p[i+1]); }
+      return {x1,y1,x2,y2};
+    }
+    if(o.t === "shape") return {x1:Math.min(o.x,o.x2), y1:Math.min(o.y,o.y2), x2:Math.max(o.x,o.x2), y2:Math.max(o.y,o.y2)};
+    if(o.t === "note") return {x1:o.x, y1:o.y, x2:o.x+o.w, y2:o.y+o.h};
+    return {x1:o.x, y1:o.y, x2:o.x+o.w, y2:o.y + o.s*1.4*Math.max(1, String(o.tx||"").split("\n").length)};
+  }
+  function hit(p, pad){
+    pad = pad || 10/doc.view.z;
+    for(let i=doc.objs.length-1;i>=0;i--){
+      const o = doc.objs[i];
+      if(o.t === "ink"){
+        for(let j=0;j<o.p.length;j+=2)
+          if(Math.abs(o.p[j]-p.x) < pad+o.w && Math.abs(o.p[j+1]-p.y) < pad+o.w) return i;
+      } else {
+        const b = bounds(o);
+        if(p.x > b.x1-pad && p.x < b.x2+pad && p.y > b.y1-pad && p.y < b.y2+pad) return i;
+      }
+    }
+    return -1;
+  }
+  function moveObj(o, dx, dy){
+    if(o.t === "ink"){ for(let i=0;i<o.p.length;i+=2){ o.p[i]=R(o.p[i]+dx); o.p[i+1]=R(o.p[i+1]+dy); } }
+    else { o.x=R(o.x+dx); o.y=R(o.y+dy); if(o.t==="shape"){ o.x2=R(o.x2+dx); o.y2=R(o.y2+dy); } }
+  }
+
+  // ---------- pointer handling ----------
+  bc.addEventListener("pointerdown", e => {
+    if(e.pointerType === "pen") penSeen = true;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size === 2){ drawing = null; dragging = null; startPinch(); return; }
+    if(pointers.size > 2) return;
+    if(penSeen && e.pointerType === "touch") return;   // palm and finger rest ignored once a Pencil is used
+    bc.setPointerCapture(e.pointerId);
+    const p = toWorld(e.clientX, e.clientY);
+    commitEdit();
+
+    if(tool === "pen" || tool === "marker"){
+      snapshot();
+      const w = tool === "marker" ? 16
+        : (e.pointerType === "pen" && e.pressure ? 1.4 + e.pressure*4 : 3);
+      drawing = {t:"ink", c:inkColour, w:R(w), m: tool==="marker"?1:0, p:[R(p.x),R(p.y)]};
+      doc.objs.push(drawing);
+    } else if(tool === "erase"){
+      const i = hit(p, 14/doc.view.z);
+      if(i >= 0){ snapshot(); doc.objs.splice(i,1); render(); markDirty(); }
+      drawing = {t:"eraser"};
+    } else if(tool === "rect" || tool === "ellipse" || tool === "arrow"){
+      snapshot();
+      drawing = {t:"shape", k:tool, c:inkColour, w:2.5, x:R(p.x), y:R(p.y), x2:R(p.x), y2:R(p.y)};
+      doc.objs.push(drawing);
+    } else if(tool === "note"){
+      snapshot();
+      const o = {t:"note", x:R(p.x-90), y:R(p.y-70), w:180, h:140, c:NOTE_TINTS[noteTint%NOTE_TINTS.length], tx:""};
+      noteTint++;
+      doc.objs.push(o); render(); markDirty(); openEditor(o);
+    } else if(tool === "text"){
+      snapshot();
+      const o = {t:"text", x:R(p.x), y:R(p.y), w:340, s:26, c:inkColour, tx:""};
+      doc.objs.push(o); render(); markDirty(); openEditor(o);
+    } else if(tool === "select"){
+      const i = hit(p);
+      if(i >= 0){ snapshot(); dragging = {o:doc.objs[i], last:p}; }
+      else dragging = {pan:true, last:{x:e.clientX, y:e.clientY}};
+    }
+  });
+
+  bc.addEventListener("pointermove", e => {
+    if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pinch && pointers.size >= 2){ movePinch(); return; }
+    if(penSeen && e.pointerType === "touch") return;
+    const p = toWorld(e.clientX, e.clientY);
+
+    if(drawing && drawing.t === "ink"){
+      const q = drawing.p, lx = q[q.length-2], ly = q[q.length-1];
+      if(Math.abs(p.x-lx) + Math.abs(p.y-ly) < 1.6/doc.view.z) return;
+      q.push(R(p.x), R(p.y)); render();
+    } else if(drawing && drawing.t === "shape"){
+      drawing.x2 = R(p.x); drawing.y2 = R(p.y); render();
+    } else if(drawing && drawing.t === "eraser"){
+      const i = hit(p, 14/doc.view.z);
+      if(i >= 0){ doc.objs.splice(i,1); render(); markDirty(); }
+    } else if(dragging && dragging.pan){
+      doc.view.x -= (e.clientX - dragging.last.x)/doc.view.z;
+      doc.view.y -= (e.clientY - dragging.last.y)/doc.view.z;
+      dragging.last = {x:e.clientX, y:e.clientY};
+      render(); markDirty();
+    } else if(dragging && dragging.o){
+      moveObj(dragging.o, p.x - dragging.last.x, p.y - dragging.last.y);
+      dragging.last = p; render();
+    }
+  });
+
+  function releasePointer(e){
+    pointers.delete(e.pointerId);
+    if(pointers.size < 2) pinch = null;
+    if(drawing || dragging){
+      if(drawing && drawing.t === "ink" && drawing.p.length <= 2) drawing.p.push(drawing.p[0]+.6, drawing.p[1]);
+      drawing = null; dragging = null; markDirty(); render();
+    }
+  }
+  bc.addEventListener("pointerup", releasePointer);
+  bc.addEventListener("pointercancel", releasePointer);
+
+  // pinch to zoom, two fingers to pan
+  function centreOf(){
+    const a = [...pointers.values()];
+    return {x:(a[0].x+a[1].x)/2, y:(a[0].y+a[1].y)/2,
+            d:Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y)};
+  }
+  function startPinch(){ const c = centreOf(); pinch = {d:c.d, x:c.x, y:c.y, world:toWorld(c.x,c.y)}; }
+  function movePinch(){
+    const c = centreOf(); if(!pinch || !c.d) return;
+    const nz = Math.max(.2, Math.min(4, doc.view.z * (c.d/pinch.d)));
+    const r = bc.getBoundingClientRect();
+    doc.view.z = nz;
+    doc.view.x = pinch.world.x - (c.x - r.left)/nz;
+    doc.view.y = pinch.world.y - (c.y - r.top)/nz;
+    pinch.d = c.d;
+    render(); markDirty();
+  }
+  stage.addEventListener("wheel", e => {
+    e.preventDefault();
+    if(e.ctrlKey || e.metaKey){
+      const r = bc.getBoundingClientRect(), w = toWorld(e.clientX, e.clientY);
+      doc.view.z = Math.max(.2, Math.min(4, doc.view.z * (1 - e.deltaY/300)));
+      doc.view.x = w.x - (e.clientX - r.left)/doc.view.z;
+      doc.view.y = w.y - (e.clientY - r.top)/doc.view.z;
+    } else {
+      doc.view.x += e.deltaX/doc.view.z;
+      doc.view.y += e.deltaY/doc.view.z;
+    }
+    render(); markDirty();
+  }, {passive:false});
+
+  // ---------- text editing ----------
+  function openEditor(o){
+    editing = o;
+    const s = toScreen(o.x, o.y), z = doc.view.z;
+    ed.style.display = "block";
+    ed.style.left = s.x + "px"; ed.style.top = s.y + "px";
+    ed.style.width  = (o.t==="note" ? o.w*z : o.w*z) + "px";
+    ed.style.height = (o.t==="note" ? o.h*z : Math.max(44, o.s*1.6*z)) + "px";
+    ed.style.background = o.t === "note" ? o.c : "#fff";
+    ed.style.color = o.t === "note" ? "#22242B" : o.c;
+    ed.style.fontSize = (o.t === "note" ? 17*z : o.s*z) + "px";
+    ed.value = o.tx || "";
+    setTimeout(() => ed.focus(), 10);
+  }
+  function commitEdit(){
+    if(!editing) return;
+    editing.tx = ed.value;
+    if(!ed.value.trim() && editing.t === "text"){
+      const i = doc.objs.indexOf(editing);
+      if(i >= 0) doc.objs.splice(i,1);
+    }
+    editing = null; ed.style.display = "none"; render(); markDirty();
+  }
+  ed.addEventListener("blur", commitEdit);
+  ed.addEventListener("keydown", e => {
+    if(e.key === "Escape"){ e.preventDefault(); ed.blur(); }
+    if(e.key === "Enter" && (e.metaKey || e.ctrlKey)){ e.preventDefault(); ed.blur(); }
+  });
+  bc.addEventListener("dblclick", e => {
+    const i = hit(toWorld(e.clientX, e.clientY));
+    if(i >= 0 && (doc.objs[i].t === "note" || doc.objs[i].t === "text")){ snapshot(); openEditor(doc.objs[i]); }
+  });
+
+  // ---------- tools ----------
+  document.querySelectorAll(".tool[data-tool]").forEach(b => {
+    b.addEventListener("click", () => {
+      commitEdit();
+      document.querySelectorAll(".tool[data-tool]").forEach(o => o.classList.remove("on"));
+      b.classList.add("on"); tool = b.dataset.tool;
+      bc.style.cursor = (tool === "select") ? "grab" : "crosshair";
+    });
+  });
+  document.querySelectorAll(".ink").forEach(b => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".ink").forEach(o => o.classList.remove("on"));
+      b.classList.add("on"); inkColour = b.dataset.c;
+      if(editing && editing.t === "text"){ editing.c = inkColour; ed.style.color = inkColour; }
+    });
+  });
+  $("b-undo").addEventListener("click", () => { commitEdit(); restore(undoStack, redoStack); });
+  $("b-redo").addEventListener("click", () => { commitEdit(); restore(redoStack, undoStack); });
+  $("b-wipe").addEventListener("click", () => {
+    if(!doc.objs.length) return;
+    snapshot(); doc.objs = []; render(); markDirty();
+  });
+  $("z-in").addEventListener("click", () => zoomBy(1.25));
+  $("z-out").addEventListener("click", () => zoomBy(.8));
+  function zoomBy(f){
+    const {w,h} = stageSize(), c = {x:doc.view.x + w/2/doc.view.z, y:doc.view.y + h/2/doc.view.z};
+    doc.view.z = Math.max(.2, Math.min(4, doc.view.z*f));
+    doc.view.x = c.x - w/2/doc.view.z; doc.view.y = c.y - h/2/doc.view.z;
+    render(); markDirty();
+  }
+  $("z-fit").addEventListener("click", () => {
+    if(!doc.objs.length){ doc.view = {x:-400,y:-300,z:1}; render(); markDirty(); return; }
+    let b = {x1:1e9,y1:1e9,x2:-1e9,y2:-1e9};
+    doc.objs.forEach(o => { const q = bounds(o);
+      b.x1=Math.min(b.x1,q.x1); b.y1=Math.min(b.y1,q.y1); b.x2=Math.max(b.x2,q.x2); b.y2=Math.max(b.y2,q.y2); });
+    const {w,h} = stageSize(), pad = 60;
+    const z = Math.max(.2, Math.min(3, Math.min((w-pad*2)/Math.max(40,b.x2-b.x1), (h-pad*2)/Math.max(40,b.y2-b.y1))));
+    doc.view.z = z;
+    doc.view.x = (b.x1+b.x2)/2 - w/2/z; doc.view.y = (b.y1+b.y2)/2 - h/2/z;
+    render(); markDirty();
+  });
+  document.addEventListener("keydown", e => {
+    if($("present").classList.contains("hidden")) return;
+    if(document.activeElement === ed) return;
+    if(e.key === "Escape"){ present(false); return; }
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z"){
+      e.preventDefault(); e.shiftKey ? restore(redoStack, undoStack) : restore(undoStack, redoStack);
+    }
+    const map = {p:"pen", h:"marker", e:"erase", n:"note", t:"text", r:"rect", o:"ellipse", a:"arrow", v:"select"};
+    const t = map[e.key.toLowerCase()];
+    if(t){ const b = document.querySelector('.tool[data-tool="'+t+'"]'); if(b) b.click(); }
+  });
+
+  // ---------- publishing ----------
+  let saveTimer = null;
+  function queueSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveBoard, 300); }
+  async function saveBoard(){
+    if(!state.room || !dirty) return;
+    const {w,h} = stageSize(), v = doc.view;
+    const rect = {x:R(v.x), y:R(v.y), w:R(w/v.z), h:R(h/v.z)};
+    let objs = doc.objs;
+    let payload = JSON.stringify({v:3, r:rect, o:objs});
+    while(payload.length > 400000 && objs.length > 2){
+      objs = objs.slice(Math.ceil(objs.length/4));
+      payload = JSON.stringify({v:3, r:rect, o:objs});
+    }
+    doc.objs = objs; dirty = false;
+    await put(rBoard(state.room), payload);   // stored as a string: one write, one push to every student
+  }
+  window.addEventListener("resize", () => {
+    if(!$("present").classList.contains("hidden")) render();
+    if(!$("scr-student").classList.contains("hidden")) renderStudentBoard();
+  });
+
+  // ---------- the student's follow-along view ----------
+  const sc = $("sboard");
+  let sData = null;
+  function takeBoard(raw){
+    try{ sData = raw ? JSON.parse(raw) : null; }catch(e){ sData = null; }
+    renderStudentBoard();
+  }
+  function renderStudentBoard(){
+    const wrap = $("s-boardwrap");
+    const has = sData && sData.o && sData.o.length;
+    wrap.classList.toggle("hidden", !has);
+    if(!has) return;
+    const shell = wrap.querySelector(".sboard-shell");
+    const w = shell.clientWidth, h = shell.clientHeight;
+    const r = sData.r || {x:0,y:0,w:1000,h:750};
+    const z = Math.min(w/Math.max(1,r.w), h/Math.max(1,r.h));
+    const view = {z:z, x:r.x + r.w/2 - w/2/z, y:r.y + r.h/2 - h/2/z};
+    const c = ctx2d(sc, w, h);
+    c.clearRect(0,0,w,h);
+    drawObjects(c, sData.o, view, w, h);
+  }
+
+  /* ================= TEACHER ================= */
+  $("go-teacher").addEventListener("click", () => {
+    $("t-code").value = randomCode();
+    $("tsetup-err").classList.add("hidden");
+    show("scr-tsetup");
+  });
+  $("t-open").addEventListener("click", async () => {
+    const code = cleanCode($("t-code").value);
+    if(code.length < 3){
+      $("tsetup-err").textContent = "Room codes need at least 3 letters or numbers.";
+      $("tsetup-err").classList.remove("hidden"); return;
+    }
+    unwatchAll();
+    state.room = code;
+    state.topic = $("t-topic").value.trim() || "How are we doing so far?";
+    doc.objs = []; doc.view = {x:-400,y:-300,z:1}; undoStack=[]; redoStack=[]; dirty = true;
+    await put(rTopic(code), state.topic);
+    await drop(rAnswers(code));            // a fresh room starts with an empty tally
+    await saveBoard();
+    $("t-showcode").textContent = code;
+    $("t-showtopic").textContent = state.topic;
+    show("scr-teacher");
+    paintCounts(null);
+    watch(rAnswers(code), paintCounts);    // answers arrive the moment a student taps
+  });
+  $("t-edit").addEventListener("click", async () => {
+    const next = prompt("What are you checking on?", state.topic);
+    if(next === null) return;
+    state.topic = next.trim() || state.topic;
+    $("t-showtopic").textContent = state.topic;
+    $("p-topic").textContent = state.topic;
+    await put(rTopic(state.room), state.topic);
+  });
+  $("t-clear").addEventListener("click", async () => {
+    $("t-status").textContent = "Clearing…";
+    await drop(rAnswers(state.room));
+  });
+
+  let wakeLock = null;
+  async function keepAwake(on){
+    try{
+      if(on && "wakeLock" in navigator && !wakeLock){
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+      } else if(!on && wakeLock){ await wakeLock.release(); wakeLock = null; }
+    }catch(e){ wakeLock = null; }
+  }
+  function fullscreen(on){
+    const el = document.documentElement;
+    try{
+      if(on){ if(el.requestFullscreen) el.requestFullscreen(); else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen(); }
+      else if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      else if(document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }catch(e){}
+  }
+  function present(on){
+    $("present").classList.toggle("hidden", !on);
+    document.body.style.overflow = on ? "hidden" : "";
+    $("p-code").textContent = state.room || "——";
+    $("p-topic").textContent = state.topic || "";
+    fullscreen(on); keepAwake(on);
+    if(on){ setTimeout(render, 50); refresh(); } else { commitEdit(); saveBoard(); }
+  }
+  $("t-present").addEventListener("click", () => present(true));
+  $("p-exit").addEventListener("click", () => present(false));
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible" && !$("present").classList.contains("hidden")) keepAwake(true);
+  });
+
+  let lastSnap = null;
+  function refresh(){ paintCounts(lastSnap); }
+  function paintCounts(snap){
+    lastSnap = snap;
+    const counts = {stop:0, slow:0, go:0};
+    Object.values(snap || {}).forEach(v => { if(CLASSOF[v]) counts[v]++; });
+    const total = counts.stop + counts.slow + counts.go;
+
+    $("n-stop").textContent = counts.stop; $("n-slow").textContent = counts.slow; $("n-go").textContent = counts.go;
+    $("c-stop").textContent = counts.stop; $("c-slow").textContent = counts.slow; $("c-go").textContent = counts.go;
+
+    if(total === 0){
+      $("t-bar").className = "bar empty"; $("t-bar").textContent = "No taps yet — put the code on the board.";
+      $("b-strip").innerHTML = "";
+    } else {
+      $("t-bar").className = "bar";
+      $("t-bar").innerHTML = ["stop","slow","go"].map(v => {
+        if(!counts[v]) return "";
+        const pct = counts[v]/total*100;
+        return '<div class="'+CLASSOF[v]+'" style="width:'+pct+'%">'+(pct>11?counts[v]:"")+'</div>';
+      }).join("");
+      $("b-strip").innerHTML = ["stop","slow","go"].map(v =>
+        counts[v] ? '<div class="'+CLASSOF[v]+'" style="width:'+(counts[v]/total*100)+'%"></div>' : "").join("");
+    }
+    $("t-groups").innerHTML = total === 0 ? "" :
+      '<div class="group"><h3>' + total + (total===1?" student in the room":" students in the room")
+      + '</h3><div class="dots">'
+      + ["stop","slow","go"].map(v => new Array(counts[v]).fill('<span class="pip '+CLASSOF[v]+'"></span>').join("")).join("")
+      + '</div></div>';
+    $("t-status").textContent = total
+      ? "Anonymous · live · last change " + timeNow()
+      : "Waiting for the first tap.";
+  }
+  const timeNow = () => new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
+  /* ================= STUDENT ================= */
+  $("go-student").addEventListener("click", () => { $("join-err").classList.add("hidden"); show("scr-join"); });
+  $("s-join").addEventListener("click", async () => {
+    const code = cleanCode($("s-code").value);
+    if(code.length < 3){
+      $("join-err").textContent = "Enter the room code your teacher showed on the board.";
+      $("join-err").classList.remove("hidden"); return;
+    }
+    unwatchAll();
+    state.room = code; state.me = anonId();
+    const topic = await grab(rTopic(code));
+    if(FB && !topic){
+      $("join-err").textContent = "No room with that code. Check the letters on the board.";
+      $("join-err").classList.remove("hidden"); return;
+    }
+    state.topic = topic || "How's it going?";
+    $("s-eyebrow").textContent = "Room " + code;
+    $("s-topic").textContent = state.topic;
+    $("s-buttons").classList.remove("picked");
+    document.querySelectorAll(".sig").forEach(b => b.classList.remove("on"));
+    $("s-status").textContent = "Tap the one that's true right now. You can change it any time.";
+    sData = null; $("s-boardwrap").classList.add("hidden");
+    show("scr-student");
+    watch(rBoard(code), takeBoard);                                   // the board streams in as it's drawn
+    watch(rTopic(code), t => { if(t){ state.topic = t; $("s-topic").textContent = t; } });
+    if(FB) onDisconnect(ref(db, rAnswer(code, state.me))).remove();   // closing the tab clears their tap
+  });
+  document.querySelectorAll(".sig").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const val = btn.dataset.v;
+      document.querySelectorAll(".sig").forEach(b => b.classList.remove("on"));
+      btn.classList.add("on"); $("s-buttons").classList.add("picked");
+      $("s-status").textContent = "Sending…";
+      const ok = await put(rAnswer(state.room, state.me), val);
+      $("s-status").textContent = ok
+        ? "Sent anonymously as \u201C" + WORD[val] + "\u201D. Change it whenever you like."
+        : "That didn't send. Tap again, or tell your teacher out loud.";
+    });
+  });
+</script>
+</body>
+</html>
