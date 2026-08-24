@@ -147,6 +147,26 @@
   .sboard-shell{position:relative;width:100%;aspect-ratio:4/3;border-radius:16px;overflow:hidden;
     background:#F4F4F7;border:2px solid #C9CFD9}
   #sboard{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .sboard-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;
+    color:#8A8A93;font-size:14px;line-height:1.5;pointer-events:none}
+  .sboard-empty.hidden{display:none !important}
+
+  /* answers not open yet */
+  .signalbtns.locked .sig{opacity:.3;pointer-events:none;filter:saturate(.5)}
+  .signalbtns.locked .sig.on{opacity:.6}
+  .lockmsg{display:flex;align-items:center;gap:10px;padding:16px 18px;border-radius:14px;
+    border:2px dashed #C9CFD9;background:var(--paper2);color:#5A6273;font-size:14px;line-height:1.45;margin:8px 0 18px}
+  .lockmsg .pulse{width:12px;height:12px;border-radius:50%;background:var(--slow);flex:0 0 auto;
+    animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+  /* teacher: start / pause taking answers */
+  .collectrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 16px;padding:16px 18px;
+    border:1px solid var(--line);border-radius:14px;background:#1B1F29}
+  .collectrow .btn{padding:12px 20px}
+  .collectstate{font-size:13px;color:var(--mute);line-height:1.45;flex:1 1 180px;min-width:0}
+  .collectrow.on{border-color:var(--go)}
+  .collectrow.on .collectstate{color:#8FE0AE}
   @media (prefers-reduced-motion:reduce){*{transition:none !important}}
 </style>
 </head>
@@ -184,6 +204,10 @@
       <button class="linkish" id="t-edit">Change topic</button>
     </div>
     <p class="topic" id="t-showtopic"></p>
+    <div class="collectrow" id="t-collectrow">
+      <button class="btn" id="t-collect">Start taking answers</button>
+      <span class="collectstate" id="t-collectstate">Answers are closed. Students can see the board, but can't tap yet.</span>
+    </div>
     <div class="bar empty" id="t-bar">No taps yet — put the code on the board.</div>
     <div class="tallies">
       <div class="tally s"><b id="n-stop">0</b><span>Lost me</span></div>
@@ -261,15 +285,19 @@
   <section id="scr-student" class="hidden">
     <p class="eyebrow" id="s-eyebrow">Room</p>
     <p class="topic" id="s-topic">How's it going?</p>
-    <div class="signalbtns" id="s-buttons">
+    <div class="lockmsg hidden" id="s-lock"><span class="pulse"></span><span id="s-locktext">Your teacher hasn't opened answers yet. Watch the board — the buttons switch on when they're ready.</span></div>
+    <div class="signalbtns locked" id="s-buttons">
       <button class="sig" data-v="stop"><span class="dot"></span><span><b>I don't get it</b><em>Please go over this again</em></span></button>
       <button class="sig" data-v="slow"><span class="dot"></span><span><b>Sort of</b><em>Some parts make sense, some don't</em></span></button>
       <button class="sig" data-v="go"><span class="dot"></span><span><b>I've got it</b><em>I could explain it to someone else</em></span></button>
     </div>
     <p class="status" id="s-status">Tap the one that's true right now. You can change it any time.</p>
-    <div class="sboard hidden" id="s-boardwrap">
+    <div class="sboard" id="s-boardwrap">
       <h3>Your teacher's board</h3>
-      <div class="sboard-shell"><canvas id="sboard"></canvas></div>
+      <div class="sboard-shell">
+        <canvas id="sboard"></canvas>
+        <div class="sboard-empty" id="sboard-empty">Nothing on the board yet.<br>Whatever your teacher writes shows up here.</div>
+      </div>
     </div>
     <div class="toolbar"><button class="btn ghost" data-home>Leave room</button></div>
   </section>
@@ -278,7 +306,8 @@
 <script type="module">
   /* ---------- Firebase: live sync for rooms, answers and the board ---------- */
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, set, get, remove, onValue, onDisconnect }
+  import { getDatabase, ref, set, get, remove, update, onValue, onDisconnect,
+           onChildAdded, onChildChanged, onChildRemoved }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
   const firebaseConfig = {
@@ -301,14 +330,16 @@
   const WORD = {stop:"Lost me", slow:"Getting there", go:"Got it"};
   const NOTE_TINTS = ["#FFE27A","#FFD1DC","#BFE3FF","#C8F0D2"];
 
-  let state = {room:"", topic:"", me:"", local:{}};
+  let state = {room:"", topic:"", me:"", role:"", live:false, picked:false, local:{}};
   let watchers = [];   // live listeners, detached when leaving a room
 
   // paths in the database
   const rRoom      = code => "rooms/" + code;
   const rTopic     = code => rRoom(code) + "/topic";
-  const rBoard     = code => rRoom(code) + "/board";
+  const rObjs      = code => rRoom(code) + "/objs";   // one child per stroke/note/shape
+  const rRect      = code => rRoom(code) + "/rect";   // just the viewport, a few dozen bytes
   const rAnswers   = code => rRoom(code) + "/answers";
+  const rLive      = code => rRoom(code) + "/live";
   const rAnswer    = (code, me) => rAnswers(code) + "/" + me;
 
   function watch(path, cb){
@@ -325,6 +356,23 @@
     if(!FB) return state.local[path] || null;
     try{ const s = await get(ref(db, path)); return s.exists() ? s.val() : null; }catch(e){ return null; }
   }
+  async function patch(path, changes){          // one round trip; nulls delete children
+    if(!FB){
+      Object.entries(changes).forEach(([k,v]) => {
+        const full = path + "/" + k;
+        if(v === null) delete state.local[full]; else state.local[full] = v;
+      });
+      return true;
+    }
+    try{ await update(ref(db, path), changes); return true; }catch(e){ console.warn(e); return false; }
+  }
+  function watchChildren(path, {added, changed, removed}){
+    if(!FB) return;
+    const r = ref(db, path);
+    watchers.push(onChildAdded(r,   s => added   && added(s.key, s.val())));
+    watchers.push(onChildChanged(r, s => changed && changed(s.key, s.val())));
+    watchers.push(onChildRemoved(r, s => removed && removed(s.key)));
+  }
   async function drop(path){
     if(!FB){ delete state.local[path]; return; }
     try{ await remove(ref(db, path)); }catch(e){ console.warn(e); }
@@ -338,8 +386,9 @@
   async function goHome(){
     unwatchAll();
     if(!$("present").classList.contains("hidden")) present(false);
-    if(state.room && state.me) await drop(rAnswer(state.room, state.me));  // student leaving clears their tap
-    state = {room:"", topic:"", me:"", local:state.local};
+    if(state.role === "student" && state.room && state.me) await drop(rAnswer(state.room, state.me));  // student leaving clears their tap
+    if(state.role === "teacher" && state.room) await put(rLive(state.room), false);        // and closing the room stops every student's buttons
+    state = {room:"", topic:"", me:"", role:"", live:false, picked:false, local:state.local};
     show("scr-home");
   }
   document.querySelectorAll("[data-home]").forEach(b => b.addEventListener("click", goHome));
@@ -369,6 +418,9 @@
   let pinch = null, penSeen = false, dirty = false;
 
   const R = n => Math.round(n*10)/10;
+  let idSeq = 0;
+  // keys sort lexicographically in the database, so a time-prefixed id keeps drawing order
+  const newId = () => Date.now().toString(36).padStart(9,"0") + (idSeq++ % 46656).toString(36).padStart(3,"0");
   function snapshot(){ undoStack.push(JSON.stringify(doc.objs)); if(undoStack.length>40) undoStack.shift(); redoStack=[]; }
   function restore(from,to){
     if(!from.length) return;
@@ -523,7 +575,7 @@
       snapshot();
       const w = tool === "marker" ? 16
         : (e.pointerType === "pen" && e.pressure ? 1.4 + e.pressure*4 : 3);
-      drawing = {t:"ink", c:inkColour, w:R(w), m: tool==="marker"?1:0, p:[R(p.x),R(p.y)]};
+      drawing = {id:newId(), t:"ink", c:inkColour, w:R(w), m: tool==="marker"?1:0, p:[R(p.x),R(p.y)]};
       doc.objs.push(drawing);
     } else if(tool === "erase"){
       const i = hit(p, 14/doc.view.z);
@@ -531,16 +583,16 @@
       drawing = {t:"eraser"};
     } else if(tool === "rect" || tool === "ellipse" || tool === "arrow"){
       snapshot();
-      drawing = {t:"shape", k:tool, c:inkColour, w:2.5, x:R(p.x), y:R(p.y), x2:R(p.x), y2:R(p.y)};
+      drawing = {id:newId(), t:"shape", k:tool, c:inkColour, w:2.5, x:R(p.x), y:R(p.y), x2:R(p.x), y2:R(p.y)};
       doc.objs.push(drawing);
     } else if(tool === "note"){
       snapshot();
-      const o = {t:"note", x:R(p.x-90), y:R(p.y-70), w:180, h:140, c:NOTE_TINTS[noteTint%NOTE_TINTS.length], tx:""};
+      const o = {id:newId(), t:"note", x:R(p.x-90), y:R(p.y-70), w:180, h:140, c:NOTE_TINTS[noteTint%NOTE_TINTS.length], tx:""};
       noteTint++;
       doc.objs.push(o); render(); markDirty(); openEditor(o);
     } else if(tool === "text"){
       snapshot();
-      const o = {t:"text", x:R(p.x), y:R(p.y), w:340, s:26, c:inkColour, tx:""};
+      const o = {id:newId(), t:"text", x:R(p.x), y:R(p.y), w:340, s:26, c:inkColour, tx:""};
       doc.objs.push(o); render(); markDirty(); openEditor(o);
     } else if(tool === "select"){
       const i = hit(p);
@@ -705,20 +757,46 @@
 
   // ---------- publishing ----------
   let saveTimer = null;
+  let published = new Map();   // id -> the JSON we last sent, so we can tell what actually changed
+  let lastRect = "";
   function queueSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveBoard, 300); }
+  function resetPublished(){ published = new Map(); lastRect = ""; }
+
   async function saveBoard(){
     if(!state.room || !dirty) return;
+    dirty = false;
     const {w,h} = stageSize(), v = doc.view;
-    const rect = {x:R(v.x), y:R(v.y), w:R(w/v.z), h:R(h/v.z)};
-    let objs = doc.objs;
-    let payload = JSON.stringify({v:3, r:rect, o:objs});
-    while(payload.length > 400000 && objs.length > 2){
-      objs = objs.slice(Math.ceil(objs.length/4));
-      payload = JSON.stringify({v:3, r:rect, o:objs});
+    const changes = {};
+
+    // trim from the top if the board gets enormous, same as before but measured per object
+    let total = 0;
+    for(let i = doc.objs.length - 1; i >= 0; i--){
+      total += JSON.stringify(doc.objs[i]).length;
+      if(total > 600000){ doc.objs = doc.objs.slice(i + 1); break; }
     }
-    doc.objs = objs; dirty = false;
-    await put(rBoard(state.room), payload);   // stored as a string: one write, one push to every student
+
+    // only the objects that are new or actually changed get sent
+    const alive = new Set();
+    doc.objs.forEach(o => {
+      if(!o.id) o.id = newId();
+      alive.add(o.id);
+      const j = JSON.stringify(o);
+      if(published.get(o.id) !== j){ changes["objs/" + o.id] = j; published.set(o.id, j); }
+    });
+    // ...and anything erased or undone gets a null, which deletes just that child
+    published.forEach((_, id) => {
+      if(!alive.has(id)){ changes["objs/" + id] = null; published.delete(id); }
+    });
+
+    // the viewport is its own small key, so panning never resends a single stroke
+    const rect = JSON.stringify({x:R(v.x), y:R(v.y), w:R(w/v.z), h:R(h/v.z)});
+    if(rect !== lastRect){ changes.rect = rect; lastRect = rect; }
+
+    if(!Object.keys(changes).length) return;
+    const ok = await patch(rRoom(state.room), changes);
+    if(!ok){ resetPublished(); dirty = true; queueSave(); }   // retry from scratch rather than drift
   }
+
   window.addEventListener("resize", () => {
     if(!$("present").classList.contains("hidden")) render();
     if(!$("scr-student").classList.contains("hidden")) renderStudentBoard();
@@ -726,24 +804,36 @@
 
   // ---------- the student's follow-along view ----------
   const sc = $("sboard");
-  let sData = null;
-  function takeBoard(raw){
-    try{ sData = raw ? JSON.parse(raw) : null; }catch(e){ sData = null; }
-    renderStudentBoard();
+  let sObjs = new Map();       // id -> object, in the order the teacher drew them
+  let sRect = null;
+  let sFrame = 0;
+  function queueStudentPaint(){                  // many small updates, one repaint
+    if(sFrame) return;
+    sFrame = requestAnimationFrame(() => { sFrame = 0; renderStudentBoard(); });
+  }
+  function takeObj(id, raw){
+    try{ const o = JSON.parse(raw); o.id = id; sObjs.set(id, o); }catch(e){}
+    queueStudentPaint();
+  }
+  function dropObj(id){ sObjs.delete(id); queueStudentPaint(); }
+  function takeRect(raw){
+    try{ sRect = raw ? JSON.parse(raw) : null; }catch(e){ sRect = null; }
+    queueStudentPaint();
   }
   function renderStudentBoard(){
     const wrap = $("s-boardwrap");
-    const has = sData && sData.o && sData.o.length;
-    wrap.classList.toggle("hidden", !has);
-    if(!has) return;
+    const objs = [...sObjs.values()];
+    const has = objs.length > 0;
+    $("sboard-empty").classList.toggle("hidden", has);        // panel stays up; only the placeholder toggles
     const shell = wrap.querySelector(".sboard-shell");
     const w = shell.clientWidth, h = shell.clientHeight;
-    const r = sData.r || {x:0,y:0,w:1000,h:750};
-    const z = Math.min(w/Math.max(1,r.w), h/Math.max(1,r.h));
-    const view = {z:z, x:r.x + r.w/2 - w/2/z, y:r.y + r.h/2 - h/2/z};
+    if(w < 2) return;
     const c = ctx2d(sc, w, h);
     c.clearRect(0,0,w,h);
-    drawObjects(c, sData.o, view, w, h);
+    if(!has) return;
+    const r = sRect || {x:0,y:0,w:1000,h:750};
+    const z = Math.min(w/Math.max(1,r.w), h/Math.max(1,r.h));
+    drawObjects(c, objs, {z:z, x:r.x + r.w/2 - w/2/z, y:r.y + r.h/2 - h/2/z}, w, h);
   }
 
   /* ================= TEACHER ================= */
@@ -759,17 +849,42 @@
       $("tsetup-err").classList.remove("hidden"); return;
     }
     unwatchAll();
-    state.room = code;
+    state.room = code; state.role = "teacher";
     state.topic = $("t-topic").value.trim() || "How are we doing so far?";
     doc.objs = []; doc.view = {x:-400,y:-300,z:1}; undoStack=[]; redoStack=[]; dirty = true;
+    resetPublished();
+    await drop(rObjs(code)); await drop(rRect(code)); await drop(rRoom(code) + "/board");
     await put(rTopic(code), state.topic);
     await drop(rAnswers(code));            // a fresh room starts with an empty tally
+    await put(rLive(code), false);         // ...and closed, until the teacher says go
     await saveBoard();
     $("t-showcode").textContent = code;
     $("t-showtopic").textContent = state.topic;
+    state.live = false; paintLive();
     show("scr-teacher");
     paintCounts(null);
     watch(rAnswers(code), paintCounts);    // answers arrive the moment a student taps
+  });
+
+  /* ---- taking answers is a switch the teacher throws, not something that just happens ---- */
+  function paintLive(){
+    const on = !!state.live;
+    $("t-collectrow").classList.toggle("on", on);
+    $("t-collect").textContent = on ? "Pause answers" : "Start taking answers";
+    $("t-collect").classList.toggle("ghost", on);
+    $("t-collectstate").textContent = on
+      ? "Answers are open — the buttons are live on every student's device."
+      : "Answers are closed. Students can see the board, but can't tap yet.";
+    refresh();
+  }
+  $("t-collect").addEventListener("click", async () => {
+    state.live = !state.live;
+    paintLive();
+    const ok = await put(rLive(state.room), state.live);
+    if(!ok){                                // roll back rather than lie about the room state
+      state.live = !state.live; paintLive();
+      $("t-collectstate").textContent = "Couldn't reach the room. Try that again.";
+    }
   });
   $("t-edit").addEventListener("click", async () => {
     const next = prompt("What are you checking on?", state.topic);
@@ -827,7 +942,10 @@
     $("c-stop").textContent = counts.stop; $("c-slow").textContent = counts.slow; $("c-go").textContent = counts.go;
 
     if(total === 0){
-      $("t-bar").className = "bar empty"; $("t-bar").textContent = "No taps yet — put the code on the board.";
+      $("t-bar").className = "bar empty";
+      $("t-bar").textContent = state.live
+        ? "No taps yet — put the code on the board."
+        : "Answers are closed. Hit \u201CStart taking answers\u201D when you're ready.";
       $("b-strip").innerHTML = "";
     } else {
       $("t-bar").className = "bar";
@@ -844,9 +962,11 @@
       + '</h3><div class="dots">'
       + ["stop","slow","go"].map(v => new Array(counts[v]).fill('<span class="pip '+CLASSOF[v]+'"></span>').join("")).join("")
       + '</div></div>';
-    $("t-status").textContent = total
-      ? "Anonymous · live · last change " + timeNow()
-      : "Waiting for the first tap.";
+    $("t-status").textContent = !state.live
+      ? (total ? "Paused · " + total + " tap" + (total===1?"":"s") + " held from earlier."
+               : "Paused · nothing is being collected right now.")
+      : (total ? "Anonymous · live · last change " + timeNow()
+               : "Waiting for the first tap.");
   }
   const timeNow = () => new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
 
@@ -859,7 +979,7 @@
       $("join-err").classList.remove("hidden"); return;
     }
     unwatchAll();
-    state.room = code; state.me = anonId();
+    state.room = code; state.me = anonId(); state.role = "student";
     const topic = await grab(rTopic(code));
     if(FB && !topic){
       $("join-err").textContent = "No room with that code. Check the letters on the board.";
@@ -870,16 +990,35 @@
     $("s-topic").textContent = state.topic;
     $("s-buttons").classList.remove("picked");
     document.querySelectorAll(".sig").forEach(b => b.classList.remove("on"));
-    $("s-status").textContent = "Tap the one that's true right now. You can change it any time.";
-    sData = null; $("s-boardwrap").classList.add("hidden");
+    sData = null; state.picked = false;
+    state.live = false; paintStudentLock();                           // locked until we hear otherwise
     show("scr-student");
-    watch(rBoard(code), takeBoard);                                   // the board streams in as it's drawn
+    renderStudentBoard();                                             // board is up from the first second
+    sObjs = new Map(); sRect = null;
+    watchChildren(rObjs(code), { added: takeObj, changed: takeObj, removed: dropObj });  // only new strokes come down
+    watch(rRect(code), takeRect);
+    watch(rLive(code), v => { state.live = !!v; paintStudentLock(); });
     watch(rTopic(code), t => { if(t){ state.topic = t; $("s-topic").textContent = t; } });
     if(FB) onDisconnect(ref(db, rAnswer(code, state.me))).remove();   // closing the tab clears their tap
   });
+  function paintStudentLock(){
+    const on = !!state.live;
+    $("s-buttons").classList.toggle("locked", !on);
+    $("s-lock").classList.toggle("hidden", on);
+    if(!on){
+      $("s-status").textContent = state.picked
+        ? "Answers are paused. Your last tap still counts."
+        : "";
+    } else if(!state.picked){
+      $("s-status").textContent = "Tap the one that's true right now. You can change it any time.";
+    }
+  }
+
   document.querySelectorAll(".sig").forEach(btn => {
     btn.addEventListener("click", async () => {
+      if(!state.live) return;                     // closed room — the tap goes nowhere
       const val = btn.dataset.v;
+      state.picked = true;
       document.querySelectorAll(".sig").forEach(b => b.classList.remove("on"));
       btn.classList.add("on"); $("s-buttons").classList.add("picked");
       $("s-status").textContent = "Sending…";
