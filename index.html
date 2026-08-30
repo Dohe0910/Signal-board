@@ -990,7 +990,7 @@
     $("s-topic").textContent = state.topic;
     $("s-buttons").classList.remove("picked");
     document.querySelectorAll(".sig").forEach(b => b.classList.remove("on"));
-    sData = null; state.picked = false;
+    state.picked = false;
     state.live = false; paintStudentLock();                           // locked until we hear otherwise
     show("scr-student");
     renderStudentBoard();                                             // board is up from the first second
